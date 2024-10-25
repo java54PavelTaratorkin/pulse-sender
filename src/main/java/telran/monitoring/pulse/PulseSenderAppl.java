@@ -1,8 +1,7 @@
 package telran.monitoring.pulse;
 
 import java.net.*;
-import java.util.HashMap;
-import java.util.Random;
+import java.util.*;
 import java.util.stream.IntStream;
 
 import telran.monitoring.pulse.dto.SensorData;
@@ -13,6 +12,12 @@ public class PulseSenderAppl {
 	private static final int N_PATIENTS = 5;
 	private static final int MIN_PULSE_VALUE = 50;
 	private static final int MAX_PULSE_VALUE = 200;
+	
+	private static final int MAX_ERROR_PULSE_VALUE = MAX_PULSE_VALUE + 10;
+	private static final int MIN_ERROR_PULSE_VALUE = MIN_PULSE_VALUE - 10;
+	private static final int MAX_ERROR_PULSE_PROB = 5;
+	private static final int MIN_ERROR_PULSE_PROB = 3;
+	
 	private static final String HOST = "localhost";
 	private static final int PORT = 4000;
 	private static final int JUMP_PROB = 15;
@@ -32,9 +37,6 @@ public class PulseSenderAppl {
 
 	static void sendPulse(int seqNumber) {
 		SensorData data = getRandomSensorData(seqNumber);
-		if (data.patientId() == PATIENT_ID_PRINTED_VALUES) {
-			System.out.printf("Pulse value of patient %d is %d\n", PATIENT_ID_PRINTED_VALUES, data.value());
-		}
 		String jsonData = data.toString();
 		sendDatagramPacket(jsonData);
 		try {
@@ -56,20 +58,28 @@ public class PulseSenderAppl {
 	}
 
 	private static SensorData getRandomSensorData(int seqNumber) {
-
 		long patientId = random.nextInt(1, N_PATIENTS + 1);
 		int value = getRandomPulseValue(patientId);
 		return new SensorData(seqNumber, patientId, value, System.currentTimeMillis());
 	}
 
 	private static int getRandomPulseValue(long patientId) {
-		int valueRes = patientIdPulseValue.computeIfAbsent(patientId,
-				k -> random.nextInt(MIN_PULSE_VALUE, MAX_PULSE_VALUE + 1));
-		if (chance(JUMP_PROB)) {
-			valueRes = getValueWithJump(valueRes);
-			patientIdPulseValue.put(patientId, valueRes);
-		}
+		int valueRes;
+		// Check for error pulse values first
+		if (chance(MAX_ERROR_PULSE_PROB)) {
+			valueRes = random.nextInt(MAX_ERROR_PULSE_VALUE + 1, 300);
+		} else if (chance(MIN_ERROR_PULSE_PROB)) {
+			valueRes = random.nextInt(1, MIN_ERROR_PULSE_VALUE); 
+		} else {
+			valueRes = patientIdPulseValue.computeIfAbsent(patientId,
+					k -> random.nextInt(MIN_PULSE_VALUE, MAX_PULSE_VALUE + 1));
 
+			// Apply the jump logic only if no error pulse was generated
+			if (chance(JUMP_PROB)) {
+				valueRes = getValueWithJump(valueRes);
+				patientIdPulseValue.put(patientId, valueRes);
+			}
+		}
 		return valueRes;
 	}
 
